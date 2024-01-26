@@ -1,16 +1,16 @@
 import pandas as pd
 
 # create the field node_id in the node gdf, with its mapping id
-# create the fields node_start_id and node_end_id in the edges gdf, with mapping ids of the starting and ending point of the each edge
+# create the fields pt_start_id and pt_end_id in the edges gdf, with mapping ids of the starting and ending point of the each edge
 def map_node_ids_in_graph_gdfs(gdf_nodes, gdf_edges, mapping):
     gdf_nodes['node_id'] = 'x'
     gdf_nodes['node_id'] = gdf_nodes['geometry'].map(lambda row: mapping['map_geom'][row][0])
     map_nodes_to_edges = pd.Series(gdf_nodes.node_id.values, index=gdf_nodes.coords).to_dict()
 
-    gdf_edges['node_start_id'] = 'x'
-    gdf_edges['node_end_id'] = 'x'
-    gdf_edges['node_start_id'] = gdf_edges['geometry'].map(lambda row: map_nodes_to_edges[row.coords[0]])
-    gdf_edges['node_end_id'] = gdf_edges['geometry'].map(lambda row: map_nodes_to_edges[row.coords[-1]])
+    gdf_edges['pt_start_id'] = 'x'
+    gdf_edges['pt_end_id'] = 'x'
+    gdf_edges['pt_start_id'] = gdf_edges['geometry'].map(lambda row: map_nodes_to_edges[row.coords[0]])
+    gdf_edges['pt_end_id'] = gdf_edges['geometry'].map(lambda row: map_nodes_to_edges[row.coords[-1]])
 
     return [gdf_nodes, gdf_edges]
 

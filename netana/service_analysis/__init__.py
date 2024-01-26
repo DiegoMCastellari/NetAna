@@ -1,7 +1,7 @@
-from . import locations
-from . import travel_time_analysis
+from . import sources
+from . import service_area_analysis
 
 __all__ = [
-    'locations',
-    'travel_time_analysis'
+    'sources',
+    'service_area_analysis'
 ]

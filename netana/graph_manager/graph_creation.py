@@ -3,13 +3,18 @@ import momepy
 import networkx as nx
 from .mapping_elements import create_nodes_maps, map_node_ids_in_graph_gdfs
 
+
+
 #************* CREATE ***************
 
 # create a graph from a gdf of linestrings (no multilines)
-def create_graph_from_gdf(gdf_network, v_crs_proj, v_directed=False):
+def create_graph_from_gdf(gdf_network, f_cost, v_crs_proj, v_directed=False):
     gdf_network = gdf_network.to_crs(v_crs_proj)
     gdf_network['id'] = list(gdf_network.index +1)
-    graph = momepy.gdf_to_nx(gdf_network, approach="primal", directed=v_directed)
+    if f_cost != 'cost':
+        gdf_network.rename(columns={f_cost:'cost'}, inplace=True)
+
+    graph = momepy.gdf_to_nx(gdf_network[['id', 'cost', 'geometry']], approach="primal", directed=v_directed)
     nodes, edges, sw = momepy.nx_to_gdf(graph, points=True, lines=True, spatial_weights=True)
 
     mapping_nodes = create_nodes_maps(nodes)
@@ -19,11 +24,11 @@ def create_graph_from_gdf(gdf_network, v_crs_proj, v_directed=False):
     return [gdf_network, graph, nodes, edges, mapping_nodes]
 
 # create a new graph (nodes and edges) from geodata file (shp, geojson, etc)
-def create_graph_from_file(v_file_path, v_crs_proj, v_directed=False):
+""" def create_graph_from_file(v_file_path, v_crs_proj, v_directed=False):
     gdf_network = gpd.read_file(v_file_path)
     gdf_network = gdf_network.to_crs(v_crs_proj)
     gdf_network, graph, nodes, edges, mapping_nodes = create_graph_from_gdf(gdf_network, v_crs_proj, v_directed)
-    return [gdf_network, graph, nodes, edges, mapping_nodes]
+    return [gdf_network, graph, nodes, edges, mapping_nodes] """
 
 # create a graph with all the nodes within a limit cost, from a starting node
 # create a new graph (subgraph) from an existing graph,starting in a node and using the cost limit  

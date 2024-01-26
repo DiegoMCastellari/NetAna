@@ -4,10 +4,10 @@ from ..tools.calc_tools import nearest_edge_to_point_parameters, calculate_weigh
 
 #************* INSERT ***************
 
-# insert a location (as node) to a graph, from a point in a gdf (params gdf and id)
-# get the nearest edge and conect the location to its nodes
+# insert a source (as node) to a graph, from a point in a gdf (params gdf and id)
+# get the nearest edge and conect the source to its nodes
 # calculate the weight of the new edges (interpolation)
-def insert_location_to_graph(gdf_points, point_id, graph, gdf_nodes, gdf_edges, mapping_nodes, f_weight, v_dist):
+def insert_source_to_graph(gdf_points, point_id, graph, gdf_nodes, gdf_edges, mapping_nodes, f_weight, v_dist):
 
     gdf_point = gdf_points.loc[gdf_points.id == point_id]
     
@@ -33,21 +33,21 @@ def insert_location_to_graph(gdf_points, point_id, graph, gdf_nodes, gdf_edges, 
     else:
         return [graph, mapping_nodes, 0]
 
-def insert_poly_location_to_graph(gdf_locations, v_loc_id, graph, gdf_nodes, gdf_edges, d_mapping, f_cost, v_dist):
+def insert_poly_source_to_graph(gdf_sources, v_loc_id, graph, gdf_nodes, gdf_edges, d_mapping, f_cost, v_dist):
     
-    locations_pt = gdf_locations.loc[[v_loc_id]]
-    locations_pt.geometry = locations_pt.geometry.apply(lambda x: MultiPoint(list(x.exterior.coords)))
-    locations_pt = locations_pt.explode(index_parts=True).reset_index(drop=True)
-    locations_pt.id = locations_pt.index + 1
-    locations_pt = locations_pt.iloc[:-1]
+    sources_pt = gdf_sources.loc[[v_loc_id]]
+    sources_pt.geometry = sources_pt.geometry.apply(lambda x: MultiPoint(list(x.exterior.coords)))
+    sources_pt = sources_pt.explode(index_parts=True).reset_index(drop=True)
+    sources_pt.id = sources_pt.index + 1
+    sources_pt = sources_pt.iloc[:-1]
 
     v_conected_total = 0
-    for i in list(locations_pt.id):
-        G_updated, mapping_nodes_updated, v_conected = insert_location_to_graph(locations_pt, i, graph, gdf_nodes, gdf_edges, d_mapping, f_cost, v_dist)
+    for i in list(sources_pt.id):
+        G_updated, mapping_nodes_updated, v_conected = insert_source_to_graph(sources_pt, i, graph, gdf_nodes, gdf_edges, d_mapping, f_cost, v_dist)
         v_conected_total += v_conected
 
     # edges between polygon vertex
-    list_coords = [(b[0], b[1]) for b in np.dstack(gdf_locations.loc[0, 'geometry'].boundary.coords.xy)[0][:-1]]
+    list_coords = [(b[0], b[1]) for b in np.dstack(gdf_sources.loc[0, 'geometry'].boundary.coords.xy)[0][:-1]]
     start_node = list_coords[0]
     edges_list = []
     for end_node in list_coords[1:]:
