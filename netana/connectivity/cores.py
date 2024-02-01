@@ -1,9 +1,10 @@
+import pandas as pd
 import networkx as nx
 
 def find_k_cores(graph, gdf_nodes, gdf_edges, mapping_nodes, k_value):
     k_core_values = nx.k_core(nx.Graph(graph), k=k_value)
 
-    core_k_field = "core_"+str(k)
+    core_k_field = "core_"+str(k_value)
     k_core_ids = [mapping_nodes['map_coords'][x][0] for x in list(k_core_values)]
 
     gdf_nodes[core_k_field] = gdf_nodes.apply(lambda row: 1 if row.node_id in k_core_ids else 0, axis=1)

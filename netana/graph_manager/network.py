@@ -1,9 +1,10 @@
 import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point
+import networkx as nx
 
 def create_walking_network(gdf_network, crs_calc):
-    gdf_network = gdf_network.explode().reset_index(drop=True)
+    gdf_network = gdf_network.explode(index_parts=True).reset_index(drop=True)
     gdf_network = gdf_network.to_crs(crs_calc)
 
     gdf_network['len_m'] = gdf_network.length
@@ -77,3 +78,18 @@ def split_intersecting_lines(gdf_lines):
     df_lines_classified, df_points_classified = extract_points_from_lines(gpd_lines)
         
     return df_lines_classified, df_points_classified
+
+
+
+def set_island_to_nodes(graph, gdf_nodes):
+    islands = {}
+    for i, c in enumerate(nx.connected_components(graph)):
+        if i != 0: 
+            islands[f"I{i}"] = c
+
+    gdf_nodes['island'] = 0
+    for k in islands.keys():
+        for p in list(islands[k]):
+            gdf_nodes.loc[gdf_nodes.coords == p, 'island'] = k
+
+    return gdf_nodes

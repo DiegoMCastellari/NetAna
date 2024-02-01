@@ -8,7 +8,7 @@ from .mapping_elements import create_nodes_maps, map_node_ids_in_graph_gdfs
 #************* CREATE ***************
 
 # create a graph from a gdf of linestrings (no multilines)
-def create_graph_from_gdf(gdf_network, f_cost, v_crs_proj, v_directed=False, remove_isolated=True, remove_selfloop=True):
+def create_graph_from_gdf(gdf_network, v_crs_proj, f_cost='cost', v_directed=False, remove_isolated=True, remove_selfloop=True):
     gdf_network = gdf_network.to_crs(v_crs_proj)
     gdf_network['id'] = list(gdf_network.index +1)
     if f_cost != 'cost':
