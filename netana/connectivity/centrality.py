@@ -4,6 +4,10 @@ import networkx as nx
 
 ##**************  CENTRALITIES
 
+def calculate_degree_centrality(graph):
+    degree_centrality = nx.degree_centrality(graph)
+    return degree_centrality
+
 def calculate_closeness_centrality(graph, v_weight='cost'):
     close_centrality = nx.closeness_centrality(graph, distance=v_weight)
     return close_centrality
@@ -31,6 +35,9 @@ def calculate_betweenness_centrality(graph, object_type, nodes_coords=False, v_k
     else:
         print(f"object_type parameter posible values: 'nodes' or 'edges'.-")
 
+def calculate_load_centrality(graph, v_weight='cost'):
+    load_centrality = nx.load_centrality(graph, weight=v_weight)
+    return load_centrality
 
 ##**************  FUNCTIONS
 
@@ -49,7 +56,12 @@ def merge_centrality_values_to_edges(gdf_edges, centrality_values, mapping_nodes
 def calcualte_edges_centrality(graph, gdf_edges, mapping_nodes, centrality_type, object_type='edges', nodes_coords=False, v_k=1000, v_weight='cost'):
 
     print(f"Calculate {centrality_type} centrality")
-    if centrality_type == 'closeness':
+    if centrality_type == 'degree':
+        centrality_values = calculate_degree_centrality(graph)
+        edges_centrality = merge_centrality_values_to_edges(gdf_edges, centrality_values, mapping_nodes)
+        return edges_centrality
+    
+    elif centrality_type == 'closeness':
         centrality_values = calculate_closeness_centrality(graph, v_weight=v_weight)
         edges_centrality = merge_centrality_values_to_edges(gdf_edges, centrality_values, mapping_nodes)
         return edges_centrality
@@ -64,7 +76,12 @@ def calcualte_edges_centrality(graph, gdf_edges, mapping_nodes, centrality_type,
         edges_centrality = merge_centrality_values_to_edges(gdf_edges, centrality_values, mapping_nodes)
         return edges_centrality
     
+    elif centrality_type == 'load':
+        centrality_values = calculate_load_centrality(graph, v_weight=v_weight)
+        edges_centrality = merge_centrality_values_to_edges(gdf_edges, centrality_values, mapping_nodes)
+        return edges_centrality
+        
     else:
-        print(f"centrality_type parameter posible values: 'closeness', 'eigenvector' or 'betweenness'.-") 
+        print(f"centrality_type parameter posible values: 'degree', 'closeness', 'eigenvector', 'betweenness' or 'load'.-") 
 
 

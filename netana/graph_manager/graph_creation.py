@@ -8,13 +8,15 @@ from .mapping_elements import create_nodes_maps, map_node_ids_in_graph_gdfs
 #************* CREATE ***************
 
 # create a graph from a gdf of linestrings (no multilines)
-def create_graph_from_gdf(gdf_network, f_cost, v_crs_proj, v_directed=False):
+def create_graph_from_gdf(gdf_network, f_cost, v_crs_proj, v_directed=False, remove_isolated=True):
     gdf_network = gdf_network.to_crs(v_crs_proj)
     gdf_network['id'] = list(gdf_network.index +1)
     if f_cost != 'cost':
         gdf_network.rename(columns={f_cost:'cost'}, inplace=True)
 
     graph = momepy.gdf_to_nx(gdf_network[['id', 'cost', 'geometry']], approach="primal", directed=v_directed)
+    if remove_isolated == True:
+        graph.remove_nodes_from(list(nx.isolates(graph)))
     nodes, edges, sw = momepy.nx_to_gdf(graph, points=True, lines=True, spatial_weights=True)
 
     mapping_nodes = create_nodes_maps(nodes)
