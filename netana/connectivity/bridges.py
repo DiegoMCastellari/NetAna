@@ -1,6 +1,21 @@
 import pandas as pd
 import networkx as nx
 
+def filter_border_edges(graph, edges_bridges, mapping_nodes):
+    df_point_degree = pd.DataFrame(list(graph.degree()), columns=['point', 'degree'])
+    df_point_degree['point_id'] = df_point_degree.apply(lambda row: mapping_nodes['map_coords'][row.point][0], axis=1)
+
+    edges_m = edges_bridges.merge(df_point_degree[['point_id', 'degree']], left_on='node_start', right_on='point_id')
+    edges_m.rename(columns={'degree':'degree_start'}, inplace=True)
+    edges_m.drop(columns='point_id', inplace=True)
+    edges_m = edges_m.merge(df_point_degree[['point_id', 'degree']], left_on='node_end', right_on='point_id')
+    edges_m.rename(columns={'degree':'degree_end'}, inplace=True)
+    edges_m.drop(columns='point_id', inplace=True)
+    edges_m.loc[(edges_m.degree_start == 1) | (edges_m.degree_end == 1), 'bridge'] = 0
+    edges_m.drop(columns='degree_start', inplace=True)
+    edges_m.drop(columns='degree_end', inplace=True)
+
+    return edges_bridges
 
 def find_bridge_edges(graph, gdf_edges, mapping_nodes):
 
@@ -18,4 +33,9 @@ def find_bridge_edges(graph, gdf_edges, mapping_nodes):
     edges_bridges.loc[edges_bridges.bridge.notnull(), 'bridge'] = 1
     edges_bridges.bridge.fillna(0, inplace=True)
 
+    return edges_bridges
+
+def find_bridges(graph, gdf_edges, mapping_nodes):
+    edges_bridges = find_bridge_edges(graph, gdf_edges, mapping_nodes)
+    edges_bridges = filter_border_edges(graph, edges_bridges, mapping_nodes)
     return edges_bridges
