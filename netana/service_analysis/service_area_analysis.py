@@ -3,23 +3,20 @@ import geopandas as gpd
 import networkx as nx
 from ..tools.calc_tools import split_line_by_point
 
-def calculate_travel_time_to_all_nodes(graph, f_cost, loc_node_list, mapping_nodes):
+def calculate_travel_time_to_all_nodes(graph, f_cost, loc_node_list):
     result = nx.multi_source_dijkstra_path_length(graph, 
-                                        sources = list(pd.Series(loc_node_list).map(lambda row: mapping_nodes['map_nodes'][row][0])), 
+                                        sources = loc_node_list, 
                                         cutoff=None, 
                                         weight=f_cost)
-    df = pd.DataFrame(result.items(), columns=['node_to', 'cost_to'])
-    df['node_id'] = df['node_to'].map(lambda row: mapping_nodes['map_coords'][row][0])
-    df = df[['node_id', 'node_to', 'cost_to']]
-
+    df = pd.DataFrame(result.items(), columns=['node_id', 'cost_to'])
     return df
 
 def asign_cost_values_to_nodes_and_edges(gdf_nodes, gdf_edges, df_cost):
     df_nodes= gdf_nodes.merge(df_cost[['node_id', 'cost_to']], on='node_id', how='left')
-    df_nodes= df_nodes[['nodeID', 'geometry', 'cost_to']]
+    df_nodes= df_nodes[['node_id', 'geometry', 'cost_to']]
 
-    df_edges = gdf_edges.merge(df_cost[['node_id', 'cost_to']], left_on='pt_start_id', right_on='node_id', how='left')
-    df_edges = df_edges.merge(df_cost[['node_id', 'cost_to']], left_on='pt_end_id', right_on='node_id', how='left')
+    df_edges = gdf_edges.merge(df_cost[['node_id', 'cost_to']], left_on='node_id_st', right_on='node_id', how='left')
+    df_edges = df_edges.merge(df_cost[['node_id', 'cost_to']], left_on='node_id_en', right_on='node_id', how='left')
     df_edges.rename(columns={'cost_to_x':'cost_start', 'cost_to_y':'cost_end'}, inplace=True)
     df_edges['cost_mean'] = (df_edges['cost_start'] + df_edges['cost_end'])/2
     df_edges.drop(columns=['node_id_x', 'node_id_y'], inplace=True)
@@ -49,8 +46,8 @@ def create_service_area_by_cost_limit(gdf_edges, cost_limit):
     df_edges_cost_limit['cost_limit'] = cost_limit
     return df_edges_cost_limit
 
-def calculate_service_edges(graph, gdf_nodes, gdf_edges, f_cost, v_cost_limit, list_source_nodes, mapping_nodes):
-    df_cost_times = calculate_travel_time_to_all_nodes(graph, f_cost, list_source_nodes, mapping_nodes)
+def calculate_service_edges(graph, gdf_nodes, gdf_edges, f_cost, v_cost_limit, list_source_nodes):
+    df_cost_times = calculate_travel_time_to_all_nodes(graph, f_cost, list_source_nodes)
     gdf_nodes, gdf_edges = asign_cost_values_to_nodes_and_edges(gdf_nodes, gdf_edges, df_cost_times)
     df_edges_cost_limit = create_service_area_by_cost_limit(gdf_edges, v_cost_limit)
     return df_edges_cost_limit
@@ -102,11 +99,11 @@ def merge_service_areas_polygons( list_gpd_service_areas, v_type='rings'):
         return gpd_all_areas
     
 ## SERVICES AREAS FOR MULTIPLE COST LIMITS
-def create_service_area_for_multiple_costs(graph, gdf_nodes, gdf_edges, f_cost , list_cost, list_source_nodes, mapping_nodes, v_buffer_meters, v_dissolve_distance, area_type='rings'): 
+def create_service_area_for_multiple_costs(graph, gdf_nodes, gdf_edges, f_cost , list_cost, list_source_nodes, v_buffer_meters, v_dissolve_distance, area_type='rings'): 
 
     list_costs_buffers = []
     for v_cost_limit in list_cost:
-        df_edges_cost_limit = calculate_service_edges(graph, gdf_nodes, gdf_edges, f_cost, v_cost_limit, list_source_nodes, mapping_nodes)
+        df_edges_cost_limit = calculate_service_edges(graph, gdf_nodes, gdf_edges, f_cost, v_cost_limit, list_source_nodes)
         df_edges_cost_limit_buffer = create_service_area(df_edges_cost_limit, v_buffer_meters, v_dissolve_distance)
         list_costs_buffers.append(df_edges_cost_limit_buffer)
 

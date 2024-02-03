@@ -6,7 +6,7 @@ import networkx as nx
 def relabel_nodes_to_coords(v_graph, v_mapping):
     mapping_dict = {}
     for n in v_mapping['map_coords'].keys():
-        mapping_dict[v_mapping['map_coords'][n][0]] = n
+        mapping_dict[v_mapping['map_coords'][n]] = n
     new_graph = nx.relabel_nodes(v_graph, mapping_dict, copy=True)
     return new_graph
 
@@ -14,6 +14,6 @@ def relabel_nodes_to_coords(v_graph, v_mapping):
 def relabel_nodes_to_numbers(v_graph, v_mapping):
     mapping_dict = {}
     for n in v_mapping['map_nodes'].keys():
-        mapping_dict[v_mapping['map_nodes'][n][0]] = n
+        mapping_dict[v_mapping['map_nodes'][n]] = n
     new_graph = nx.relabel_nodes(v_graph, mapping_dict, copy=True)
     return new_graph

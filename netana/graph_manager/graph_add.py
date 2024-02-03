@@ -4,6 +4,10 @@ from ..tools.calc_tools import nearest_edge_to_point_parameters, calculate_weigh
 
 #************* INSERT ***************
 
+def add_edges_list_to_graph(graph, list_edges_connections):
+    graph.add_edges_from(list_edges_connections)
+    return graph
+
 # insert a source (as node) to a graph, from a point in a gdf (params gdf and id)
 # get the nearest edge and conect the source to its nodes
 # calculate the weight of the new edges (interpolation)

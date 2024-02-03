@@ -16,18 +16,18 @@ def calculate_eigenvector_centrality(graph, v_k=1000, v_weight='cost'):
     eigen_centrality = nx.eigenvector_centrality(graph, max_iter=v_k, weight=v_weight)
     return eigen_centrality
 
-def calculate_betweenness_centrality(graph, object_type, nodes_coords=False, v_k=1000, v_weight='cost'):
+def calculate_betweenness_centrality(graph, object_type, nodes_ids=False, v_k=1000, v_weight='cost'):
 
-    if object_type == 'nodes':
-        if nodes_coords != False:
-            between_centrality = nx.betweenness_centrality_subset(graph, sources=nodes_coords, targets=list(graph.nodes), weight=v_weight)
+    if object_type == 'Point':
+        if nodes_ids != False:
+            between_centrality = nx.betweenness_centrality_subset(graph, sources=nodes_ids, targets=list(graph.nodes), weight=v_weight)
         else:
             between_centrality = nx.betweenness_centrality(graph, k=v_k, weight=v_weight)
         return between_centrality
     
-    elif object_type == 'edges':
-        if nodes_coords != False:
-            between_centrality = nx.edge_betweenness_centrality_subset(graph, sources=nodes_coords, targets=list(graph.nodes), weight=v_weight)
+    elif object_type == 'LineString':
+        if nodes_ids != False:
+            between_centrality = nx.edge_betweenness_centrality_subset(graph, sources=nodes_ids, targets=list(graph.nodes), weight=v_weight)
         else:
             between_centrality = nx.edge_betweenness_centrality(graph, k=v_k, weight=v_weight)
         return between_centrality
@@ -39,47 +39,77 @@ def calculate_load_centrality(graph, v_weight='cost'):
     load_centrality = nx.load_centrality(graph, weight=v_weight)
     return load_centrality
 
-##**************  FUNCTIONS
+##**************  ASIGN VALUES TO NODES OR EDGES
 
-def merge_centrality_values_to_edges(gdf_edges, centrality_values, mapping_nodes):
-    df_edges_centrality = pd.DataFrame(list(centrality_values.items()), columns=['Key', 'Values'])
-    df_edges_centrality['node_start'] = df_edges_centrality.apply(lambda row: mapping_nodes['map_coords'][row.Key[0]][0], axis=1)
-    df_edges_centrality['node_end'] = df_edges_centrality.apply(lambda row: mapping_nodes['map_coords'][row.Key[1]][0], axis=1)
-    df_edges_centrality['node_start_end'] = df_edges_centrality.apply(lambda row: str(row.node_start) +'-'+ str(row.node_end), axis=1)
+def merge_centrality_values_to_nodes(gdf_nodes, centrality_values):
+    df_edges_centrality = pd.DataFrame(list(centrality_values.items()), columns=['node_id', 'centrality'])
+    edges_centrality = gdf_nodes.merge(df_edges_centrality[['centrality', 'node_id']], on='node_id', how='left')
+    return edges_centrality
 
-    gdf_edges['node_start_end'] = gdf_edges.apply(lambda row: str(row.node_start) +'-'+ str(row.node_end), axis=1)
-    edges_centrality = gdf_edges.merge(df_edges_centrality[['Values', 'node_start_end']], on='node_start_end', how='left')
+def merge_centrality_values_to_edges(gdf_edges, centrality_values):
+    df_edges_centrality = pd.DataFrame(list(centrality_values.items()), columns=['Key', 'centrality'])
+
+    df_edges_centrality['node_start'] = df_edges_centrality.apply(lambda row: row.Key[0], axis=1)
+    df_edges_centrality['node_end'] = df_edges_centrality.apply(lambda row: row.Key[1], axis=1)
+
+    df_edges_centrality['node_st_en'] = df_edges_centrality.apply(lambda row: str(row.node_start) +'-'+ str(row.node_end), axis=1)
+
+    gdf_edges['node_st_en'] = gdf_edges.apply(lambda row: str(row.node_id_st) +'-'+ str(row.node_id_en), axis=1)
+    edges_centrality = gdf_edges.merge(df_edges_centrality[['centrality', 'node_st_en']], on='node_st_en', how='left')
 
     return edges_centrality
     
 
-def calcualte_edges_centrality(graph, gdf_edges, mapping_nodes, centrality_type, object_type='edges', nodes_coords=False, v_k=1000, v_weight='cost'):
+##**************  GENERAL FUNCTION
+
+def calcualte_edges_centrality(graph, gdf_geom, centrality_type, nodes_ids=False, v_k=1000, v_weight='cost'):
+
+    geometry_type = list(gdf_geom.geom_type)[0]
 
     print(f"Calculate {centrality_type} centrality")
     if centrality_type == 'degree':
-        centrality_values = calculate_degree_centrality(graph)
-        edges_centrality = merge_centrality_values_to_edges(gdf_edges, centrality_values, mapping_nodes)
-        return edges_centrality
+        if geometry_type == 'Point':
+            centrality_values = calculate_degree_centrality(graph)
+            edges_centrality = merge_centrality_values_to_nodes(gdf_geom, centrality_values)
+            return edges_centrality
+        else:
+            print(f"gdf_geom geometry must be Point.-") 
     
     elif centrality_type == 'closeness':
-        centrality_values = calculate_closeness_centrality(graph, v_weight=v_weight)
-        edges_centrality = merge_centrality_values_to_edges(gdf_edges, centrality_values, mapping_nodes)
-        return edges_centrality
+        if geometry_type == 'Point':
+            centrality_values = calculate_closeness_centrality(graph, v_weight=v_weight)
+            edges_centrality = merge_centrality_values_to_nodes(gdf_geom, centrality_values)
+            return edges_centrality
+        else:
+            print(f"gdf_geom geometry must be Point.-") 
     
     elif centrality_type == 'eigenvector':
-        centrality_values = calculate_eigenvector_centrality(graph, v_k=v_k, v_weight=v_weight)
-        edges_centrality = merge_centrality_values_to_edges(gdf_edges, centrality_values, mapping_nodes)
-        return edges_centrality
+        if geometry_type == 'Point':
+            centrality_values = calculate_eigenvector_centrality(graph, v_k=v_k, v_weight=v_weight)
+            edges_centrality = merge_centrality_values_to_nodes(gdf_geom, centrality_values)
+            return edges_centrality
+        else:
+            print(f"gdf_geom geometry must be Point.-") 
     
-    elif centrality_type == 'betweenness':
-        centrality_values = calculate_betweenness_centrality(graph, object_type, nodes_coords, v_k=v_k, v_weight=v_weight)
-        edges_centrality = merge_centrality_values_to_edges(gdf_edges, centrality_values, mapping_nodes)
-        return edges_centrality
-    
+    elif centrality_type == 'betweenness': 
+        if geometry_type == 'Point':
+            centrality_values = calculate_betweenness_centrality(graph, 'Point', nodes_ids, v_k=v_k, v_weight=v_weight)
+            edges_centrality = merge_centrality_values_to_nodes(gdf_geom, centrality_values)
+            return edges_centrality
+        if geometry_type == 'LineString':
+            centrality_values = calculate_betweenness_centrality(graph, 'LineString', nodes_ids, v_k=v_k, v_weight=v_weight)
+            edges_centrality = merge_centrality_values_to_edges(gdf_geom, centrality_values)
+            return edges_centrality
+        else:
+            print(f"gdf_geom geometry must be Point or LineString.-") 
+
     elif centrality_type == 'load':
-        centrality_values = calculate_load_centrality(graph, v_weight=v_weight)
-        edges_centrality = merge_centrality_values_to_edges(gdf_edges, centrality_values, mapping_nodes)
-        return edges_centrality
+        if geometry_type == 'Point':
+            centrality_values = calculate_load_centrality(graph, v_weight=v_weight)
+            edges_centrality = merge_centrality_values_to_edges(gdf_geom, centrality_values)
+            return edges_centrality
+        else:
+            print(f"gdf_geom geometry must be Point.-")
         
     else:
         print(f"centrality_type parameter posible values: 'degree', 'closeness', 'eigenvector', 'betweenness' or 'load'.-") 

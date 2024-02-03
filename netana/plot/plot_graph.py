@@ -10,11 +10,10 @@ def plot_geo_graph(v_gdf, v_graph, v_node_mapping):
         facet.set_title(("Streets", "Primal graph", "Overlay")[i])
         facet.axis("off")
 
-    new_graph = relabel_nodes_to_numbers(v_graph, v_node_mapping)
-    dict_coords = {n:[v_node_mapping['map_nodes'][n][0][0], v_node_mapping['map_nodes'][n][0][1]] for n in v_node_mapping['map_nodes'].keys()}
-    nx.draw(new_graph, dict_coords, ax=ax[1], node_size=15)
+    dict_coords = {n:[list(v_node_mapping['map_nodes'][n].coords)[0][0], list(v_node_mapping['map_nodes'][n].coords)[0][1]] for n in v_node_mapping['map_nodes'].keys()}
+    nx.draw(v_graph, dict_coords, ax=ax[1], node_size=15)
     v_gdf.plot(color='#e32e00', ax=ax[2], zorder=-1)
-    nx.draw(new_graph, dict_coords, ax=ax[2], node_size=15)
+    nx.draw(v_graph, dict_coords, ax=ax[2], node_size=15)
 
 # plot graph with node ids
 def plot_graph (v_graph, v_mapping, v_labels=True):

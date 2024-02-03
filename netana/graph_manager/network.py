@@ -3,22 +3,130 @@ import geopandas as gpd
 from shapely.geometry import Point, LineString
 import networkx as nx
 
-def calculate_speed_cost(gdf_network, crs_calc, v_speed): # speed = m/min
+def calculate_speed_cost(gdf_network, v_speed): # speed = m/min
+    
+    gdf_network['dist'] = gdf_network.length
+    gdf_network.dist = round(gdf_network.dist, 2)
+
+    gdf_network['cost'] = gdf_network['dist'] / v_speed
+
+    return gdf_network
+
+def create_gdf_network(gdf_network, v_crs_proj, v_speed, v_label=None):
+    gdf_network['id'] = list(gdf_network.index +1)
     gdf_network = gdf_network.explode(index_parts=True).reset_index(drop=True)
-    gdf_network = gdf_network.to_crs(crs_calc)
+    gdf_network = gdf_network.to_crs(v_crs_proj)
+    
+    calculate_speed_cost(gdf_network, v_speed)
+    gdf_network = gdf_network[['id', 'dist', 'cost', 'geometry']]
 
-    gdf_network['len_m'] = gdf_network.length
-    gdf_network.len_m = round(gdf_network.len_m, 2)
+    if v_label:
+        gdf_network['label'] = v_label
+        gdf_network = gdf_network[['id', 'dist', 'cost', 'label', 'geometry']]
 
-    gdf_network['cost'] = gdf_network['len_m'] / v_speed
-    gdf_network['id'] = list(gdf_network.index)
-
-    gdf_network = gdf_network[['id', 'len_m', 'cost', 'geometry']]
     return gdf_network
 
-def create_walking_network(gdf_network, crs_calc):
-    gdf_network= calculate_speed_cost(gdf_network, crs_calc, 80)
+##**************  NETWORKS CONNECTIONS (JOINS) 
+
+def extract_points_from_network(gdf_network):
+
+    list_points_start = gdf_network.apply(lambda row: Point(row.geometry.coords[0]), axis=1)
+    list_points_end = gdf_network.apply(lambda row: Point(row.geometry.coords[-1]), axis=1)
+    gdf_points = gpd.GeoDataFrame(pd.concat([list_points_start, list_points_end]), columns=['geometry'], geometry='geometry')
+    gdf_points.drop_duplicates(subset='geometry', inplace=True)
+    gdf_points.reset_index(inplace=True, drop=True)
+    gdf_points.crs = gdf_network.crs
+
+    return gdf_points
+
+def create_connections_network(gdf_network_source, gdf_network_target, v_cost_set, v_crs_proj, v_buffer_search):
+
+    gdf_nodes_source = extract_points_from_network(gdf_network_source)
+    gdf_nodes_target = extract_points_from_network(gdf_network_target)
+
+    gdf_streets_buffer = gdf_nodes_source.copy()
+    gdf_streets_buffer = gdf_streets_buffer.to_crs(v_crs_proj)
+    gdf_streets_buffer['geometry_center'] = gdf_streets_buffer.geometry
+    gdf_streets_buffer.geometry = gdf_streets_buffer.buffer(v_buffer_search)
+    gdf_streets_buffer['id_b'] = gdf_streets_buffer.index +1
+
+    gdf_connections = gdf_nodes_target.copy()
+    gdf_connections = gdf_connections.to_crs(v_crs_proj)
+    gdf_connections = gdf_connections[['geometry']].sjoin(gdf_streets_buffer[['id_b', 'geometry']])
+    gdf_connections = gdf_connections.merge(gdf_streets_buffer[['id_b', 'geometry_center']], on='id_b', how='left')
+    gdf_connections['geom_lines'] = gdf_connections.apply(lambda row: LineString([row.geometry, row.geometry_center]), axis=1)
+    gdf_connections['id'] = list(gdf_connections.index +1)
+    gdf_connections['cost'] = v_cost_set
+    gdf_connections = gdf_connections[['id', 'cost', 'geom_lines']] 
+    gdf_connections.rename(columns={'geom_lines':'geometry'}, inplace=True)
+    gdf_connections.crs = gdf_streets_buffer.crs
+    
+    if ('label' in list(gdf_network_source.columns)) & ('label' in list(gdf_network_target.columns)):
+        v_label = list(gdf_network_source.label.unique())[0] +"_"+ list(gdf_network_target.label.unique())[0]
+        gdf_connections['label'] = v_label
+    return gdf_connections
+
+
+##************** COMBINE MULTIPLE GDF NETWORKS
+
+"""
+    gdf_dict = {
+        'street': {
+            'gdf':              xxx,
+            'cost_field':       xxx,
+
+        }
+    }
+
+    connection_dict= {
+        'street'= {
+            'target':              xxx,
+            'cost': 
+            'buffer_search':
+        }
+            
+    }
+"""
+
+def network_from_multi_gdfs(gdf_dict, v_crs_proj, connection_dict=False):
+
+    list_networks = []
+    for net_keys in gdf_dict.keys():
+        gdf_net = gdf_dict[net_keys]['gdf']
+        v_speed = gdf_dict[net_keys]['speed']
+        v_label = net_keys
+        gdf_net_clean = create_gdf_network(gdf_net, v_crs_proj, v_speed, v_label=v_label)
+        list_networks.append(gdf_net_clean)
+
+    if connection_dict != False:
+        for con_key in connection_dict.keys():
+            gdf_network_source = gdf_dict[con_key]['gdf']
+            gdf_network_target = gdf_dict[connection_dict[con_key]['target']]['gdf']
+            v_cost_set = connection_dict[con_key]['cost']
+            v_buffer_search = connection_dict[con_key]['buffer_search']
+            gdf_con = create_connections_network(gdf_network_source, gdf_network_target, v_cost_set, v_crs_proj, v_buffer_search)
+            gdf_network['label']= con_key +"_"+ connection_dict[con_key]['target']
+            list_networks.append(gdf_con)
+    
+    gdf_network = pd.concat(list_networks)
+    gdf_network.crs = gdf_net_clean.crs
+
     return gdf_network
+
+##************** TOPOLOGY
+
+def reverse_line_direction(gdf_lines):
+
+    reversed_lines = gdf_lines.apply(lambda row: LineString([row.geometry.coords[1], row.geometry.coords[0]]), axis=1)
+    df = gpd.GeoDataFrame(reversed_lines, columns=['geometry'], geometry='geometry')
+
+    columns_list = gdf_lines.columns
+    columns_list.remove('geometry')
+    for col in columns_list:
+        df[col] = gdf_lines[col]
+    
+    return df
+
 
 def classify_points_position(gpd_points, gpd_lines):
     
@@ -101,14 +209,4 @@ def set_island_to_nodes(graph, gdf_nodes):
 
     return gdf_nodes
 
-def reverse_line_direction(gdf_lines):
 
-    reversed_lines = gdf_lines.apply(lambda row: LineString([row.geometry.coords[1], row.geometry.coords[0]]), axis=1)
-    df = gpd.GeoDataFrame(reversed_lines, columns=['geometry'], geometry='geometry')
-
-    columns_list = gdf_lines.columns
-    columns_list.remove('geometry')
-    for col in columns_list:
-        df[col] = gdf_lines[col]
-    
-    return df

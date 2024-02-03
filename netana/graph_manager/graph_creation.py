@@ -4,57 +4,166 @@ from shapely.geometry import Point, LineString
 
 import momepy
 import networkx as nx
-from .network import calculate_speed_cost, create_walking_network, reverse_line_direction
-from .mapping_elements import create_nodes_maps, map_node_ids_in_graph_gdfs
-
+from .network import  create_connections_network
+from .graph_add import add_edges_list_to_graph
 
 
 #************* CREATE ***************
 
 # create a graph from a gdf of linestrings (no multilines)
-def create_graph_from_gdf(gdf_network, v_crs_proj, f_cost='cost', v_directed=False, remove_isolated=False, remove_selfloop=False):
-    gdf_network = gdf_network.to_crs(v_crs_proj)
-    gdf_network['id'] = list(gdf_network.index +1)
-    if f_cost != 'cost':
-        gdf_network.rename(columns={f_cost:'cost'}, inplace=True)
+def create_graph_from_gdf(gdf_network, v_make_directed=False, v_directed=False, remove_isolated=False, remove_selfloop=False):
 
-    graph = momepy.gdf_to_nx(gdf_network[['id', 'cost', 'geometry']], approach="primal", directed=v_directed)
+    if 'label' in list(gdf_network.columns):
+        graph = momepy.gdf_to_nx(gdf_network[['id', 'cost', 'label', 'geometry']], approach="primal", directed=v_directed)
+    else:
+        graph = momepy.gdf_to_nx(gdf_network[['id', 'cost', 'geometry']], approach="primal", directed=v_directed)
+
     if remove_isolated == True:
         graph.remove_nodes_from(list(nx.isolates(graph)))
     if remove_selfloop == True:
         graph.remove_edges_from(nx.selfloop_edges(graph))
 
-    return [graph, gdf_network]
+    if v_make_directed == True:
+        graph = graph.to_directed(as_view=False)
 
+    graph_2 = nx.convert_node_labels_to_integers(graph, first_label=0, ordering='default', label_attribute='coords')
+    if 'label' in list(gdf_network.columns):
+        v_label = list(gdf_network.label.unique())[0]
+        dictionary = dict(zip( list(graph_2.nodes) , [str(x) +"_"+ v_label for x in list(graph_2.nodes)]))
+        graph_2 = nx.relabel_nodes(graph_2, dictionary, copy=True)
+
+    return graph_2
+
+def merge_graphs(list_graphs):
+    if len(list_graphs) == 2:
+        composed_graph = nx.compose(list_graphs[0], list_graphs[1])
+    else:
+        composed_graph = nx.compose_all(list_graphs)
+    return composed_graph
+
+
+def map_geom_nodes_rel(graph):
+    dict_nodes = dict(zip(list(graph.nodes), [Point(graph.nodes[n]['coords']) for n in list(graph.nodes)]))
+    dict_geom = dict(zip([Point(graph.nodes[n]['coords']) for n in list(graph.nodes)], list(graph.nodes)))
+    dict_mapping_nodes = {'map_nodes':dict_nodes, 'map_geom':dict_geom}
+    return dict_mapping_nodes
+
+def nodes_to_points(graph):
+    dict_mapping_nodes = map_geom_nodes_rel(graph)
+    gdf_nodes = gpd.GeoDataFrame(dict_mapping_nodes['map_nodes'].items(), columns=['node_id', 'geometry'], geometry='geometry')
+    return gdf_nodes
+
+# extract points and linestrings from graph, and the mapping relationship between nodes ids and geometry 
 def create_geodata_from_graph(graph):
-    nodes, edges, sw = momepy.nx_to_gdf(graph, points=True, lines=True, spatial_weights=True)
+    dict_mapping_nodes = map_geom_nodes_rel(graph)
 
-    mapping_nodes = create_nodes_maps(nodes)
-    nodes, edges = map_node_ids_in_graph_gdfs(nodes, edges, mapping_nodes)
+    gdf_nodes = gpd.GeoDataFrame(dict_mapping_nodes['map_nodes'].items(), columns=['node_id', 'geometry'], geometry='geometry')
+    gdf_edges = gpd.GeoDataFrame([graph.edges[e] for e in list(graph.edges)], geometry='geometry')
 
-    edges['category'] = 'edge'
-    return [nodes, edges, mapping_nodes]
+    gdf_edges['node_id_st'] = gdf_edges.apply(lambda row: dict_mapping_nodes['map_geom'][Point(row.geometry.coords[0])], axis=1)
+    gdf_edges['node_id_en'] = gdf_edges.apply(lambda row: dict_mapping_nodes['map_geom'][Point(row.geometry.coords[-1])], axis=1)
+
+    return [gdf_nodes, gdf_edges, dict_mapping_nodes]
+
+# create graph, point, edges and mapping dict. from gdf
+def graph_from_gdf(gdf_network, f_cost='cost', v_label=None, v_make_directed=False, v_directed=False, remove_isolated=False, remove_selfloop=False):
+
+    graph = create_graph_from_gdf(gdf_network, f_cost=f_cost, v_make_directed=v_make_directed, v_directed=v_directed, remove_isolated=remove_isolated, remove_selfloop=remove_selfloop)
+        
+    gdf_nodes, gdf_edges, dict_mapping_nodes = create_geodata_from_graph(graph)
+    gdf_nodes.crs = gdf_network.crs
+    gdf_edges.crs = gdf_network.crs
+
+    return [graph, gdf_nodes, gdf_edges, dict_mapping_nodes]
+
+# create graph, point, edges and mapping dict. from multiple gdfs
+def create_graph_from_multigdfs(graph_dict, connection_list, v_crs_proj):
+
+    list_graphs = []
+    list_networks = []
+
+    for graph_key in graph_dict.keys():
+
+        dict_keys = list(graph_dict['street'].keys())
+
+        if 'v_make_directed' in dict_keys:
+            value_make_directed = graph_dict['street']['v_make_directed']
+        else:
+            value_make_directed = False
+        if 'v_directed' in dict_keys:
+            value_v_directed = graph_dict['street']['v_directed']
+        else:
+            value_v_directed = False
+        if 'remove_isolated' in dict_keys:
+            value_remove_isolated = graph_dict['street']['remove_isolated']
+        else:
+            value_remove_isolated = False
+        if 'remove_selfloop' in dict_keys:
+            value_remove_selfloop = graph_dict['street']['remove_selfloop']
+        else:
+            value_remove_selfloop = False
 
 
-def find_nodes_connections(gdf_nodes, gdf_nodes_target, v_cost_set, v_crs_proj, v_buffer_search):
-    gdf_streets_buffer = gdf_nodes.copy()
-    gdf_streets_buffer = gdf_streets_buffer.to_crs(v_crs_proj)
-    gdf_streets_buffer['geometry_center'] = gdf_streets_buffer.geometry
-    gdf_streets_buffer.geometry = gdf_streets_buffer.buffer(v_buffer_search)
-    gdf_streets_buffer['id_b'] = gdf_streets_buffer.index +1
-
-    gdf_connections = gdf_nodes_target.copy()
-    gdf_connections = gdf_connections.to_crs(v_crs_proj)
-    gdf_connections = gdf_connections[['geometry']].sjoin(gdf_streets_buffer[['id_b', 'geometry']])
-    gdf_connections = gdf_connections.merge(gdf_streets_buffer[['id_b', 'geometry_center']], on='id_b', how='left')
-    gdf_connections['geom_lines'] = gdf_connections.apply(lambda row: LineString([row.geometry, row.geometry_center]), axis=1)
-    gdf_connections['cost'] = v_cost_set
-    gdf_connections = gdf_connections[['cost', 'geom_lines']] 
-    gdf_connections.rename(columns={'geom_lines':'geometry'}, inplace=True)
-    gdf_connections.crs = gdf_streets_buffer.crs
+        graph = create_graph_from_gdf(
+            gdf_network= graph_dict[graph_key]['gdf_network'], 
+            v_make_directed= value_make_directed, 
+            v_directed= value_v_directed, 
+            remove_isolated= value_remove_isolated, 
+            remove_selfloop= value_remove_selfloop
+        )
+        list_graphs.append(graph) 
+        list_networks.append(graph_dict[graph_key]['gdf_network'])
     
-    return gdf_connections
+    for con_key in connection_list.keys():
+        gdf_nodes_key = graph_dict[ connection_list[con_key]['source'] ]['gdf_network']
+        gdf_nodes_value = graph_dict[ connection_list[con_key]['target'] ]['gdf_network']
+        v_cost_set = connection_list[con_key]['cost']
+        v_buffer_search = connection_list[con_key]['buffer_search']
+        
+        connection_gdf = create_connections_network(gdf_nodes_key, gdf_nodes_value, v_cost_set, v_crs_proj, v_buffer_search)
+        graph = create_graph_from_gdf(
+            gdf_network= connection_gdf, 
+            v_make_directed= True
+        )
+        list_graphs.append(graph) 
+        list_networks.append(connection_gdf)
 
+        gdf_network_complete = pd.concat(list_networks)
+        composed_graph = nx.compose_all(list_graphs)
+        gdf_nodes, gdf_edges, dict_mapping_nodes = create_geodata_from_graph(composed_graph)
+
+        return [composed_graph, gdf_network_complete, gdf_nodes, gdf_edges, dict_mapping_nodes]
+
+
+##**************  GRAPHS CONNECTIONS (JOINS) 
+
+def find_graphs_connections(graph_1, graph_2, v_cost_set, v_crs_proj, v_buffer_search, v_label):
+    
+    gdf_nodes_1 = nodes_to_points(graph_1)
+    gdf_nodes_1 = gdf_nodes_1.set_crs(v_crs_proj)
+    gdf_nodes_2 = nodes_to_points(graph_2)
+    gdf_nodes_2 = gdf_nodes_2.set_crs(v_crs_proj)
+
+    gdf_nodes_1.geometry = gdf_nodes_1.buffer(v_buffer_search)
+
+    gdf_connections = gdf_nodes_1.sjoin(gdf_nodes_2)
+    gdf_connections.rename(columns={'node_id_left':'node_start', 'node_id_right':'node_end'}, inplace=True)
+
+    list_edges_connections = list(gdf_connections.apply(lambda row: (row.node_start, row.node_end, {'cost': v_cost_set, 'label':v_label, 'geometry': LineString([graph_1.nodes[row.node_start]['coords'], graph_2.nodes[row.node_end]['coords']])}), axis=1))
+
+    return list_edges_connections
+
+def create_connection_graph (graph_1, graph_2, v_cost_set, v_crs_proj, v_buffer_search, v_label):
+    list_edges_connections = find_graphs_connections(graph_1, graph_2, v_cost_set, v_crs_proj, v_buffer_search, v_label)
+    connection_graph = nx.Graph(list_edges_connections) 
+    return connection_graph
+
+def connect_graph_to_multiple_graphs(graph_1, list_graphs, v_crs_proj):
+    final_graph = graph_1.copy()
+    for graph_item in list_graphs:
+        list_edges_connections = find_graphs_connections(graph_1, graph_item[0]['graph'], graph_item[1]['cost'], v_crs_proj, graph_item[2]['buffer_search'], graph_item[3]['label'])
+        final_graph = add_edges_list_to_graph(final_graph, list_edges_connections)
+    return final_graph
 
 # create a new graph (nodes and edges) from geodata file (shp, geojson, etc)
 """ def create_graph_from_file(v_file_path, v_crs_proj, v_directed=False):
@@ -66,48 +175,12 @@ def find_nodes_connections(gdf_nodes, gdf_nodes_target, v_cost_set, v_crs_proj, 
 # create a graph with all the nodes within a limit cost, from a starting node
 # create a new graph (subgraph) from an existing graph,starting in a node and using the cost limit  
 # returns the subgraph, and it's nodes and edges
-def create_subgraph_from_node_and_cost(graph, v_node_id, d_mapping_edges, v_cost_value, f_cost_field):    
+""" def create_subgraph_from_node_and_cost(graph, v_node_id, d_mapping_edges, v_cost_value, f_cost_field):    
     center_node =  list(graph.nodes())[v_node_id]
     subgraph = nx.ego_graph(graph, center_node, radius=v_cost_value, distance=f_cost_field)
     sub_nodes, sub_edges, sw = momepy.nx_to_gdf(subgraph, points=True, lines=True, spatial_weights=True)
     sub_nodes, sub_edges = map_node_ids_in_graph_gdfs(sub_nodes, sub_edges, d_mapping_edges)
     sub_nodes = sub_nodes.loc[sub_nodes.node_id != v_node_id]
     sub_edges.category.fillna('edge', inplace=True)
-    return [subgraph, sub_nodes, sub_edges]
-
-
-#************* CREATE TRANSPORT GRAPH***************
-
-def create_city_transport_graph(gdf_streets, dict_trasp, network_crs, v_buffer_search):
-    
-    gdf_streets = calculate_speed_cost(gdf_streets, network_crs, 80)
-    G_streets, streets = create_graph_from_gdf(gdf_streets, network_crs, v_directed=False)
-    nodes_streets, edges_streets, mapping_nodes_streets = create_geodata_from_graph(G_streets)
-    streets['line_type'] = 'street'
-    G_streets = G_streets.to_directed(as_view=False)
-    
-
-    graph_list = [G_streets]
-    gdf_network = streets
-
-    for k in dict_trasp.keys():
-        
-        gdf_trans = calculate_speed_cost(dict_trasp[k][0], network_crs, dict_trasp[k][2])
-        G_trans, gdf_trans = create_graph_from_gdf(gdf_trans, network_crs, v_directed=True)
-        gdf_trans['line_type'] = k
-
-        graph_list.append(G_trans)
-        gdf_network = pd.concat([gdf_network, gdf_trans])
-
-        gdf_connections = find_nodes_connections(nodes_streets, dict_trasp[k][1], dict_trasp[k][3], network_crs, v_buffer_search)
-        G_conn, gdf_conn = create_graph_from_gdf(gdf_connections, network_crs, v_directed=False)
-        G_conn = G_conn.to_directed(as_view=False)
-        gdf_conn['line_type'] = 'conn_'+ k
-
-        graph_list.append(G_conn)
-        gdf_network = pd.concat([gdf_network, gdf_conn])
-
-    composed_graph = nx.compose_all(graph_list)
-
-    return [composed_graph, gdf_network]
+    return [subgraph, sub_nodes, sub_edges] """
     

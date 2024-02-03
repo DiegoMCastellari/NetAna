@@ -13,7 +13,7 @@ def create_sources_from_gdf(gdf_sources, v_crs_proj):
 # return de id of nodes near
 def search_near_node_sources (gdf_sources, gdf_nodes, search_radio):
     nodes_in = gdf_nodes.sjoin(gpd.GeoDataFrame(geometry=gdf_sources.buffer(search_radio)))
-    nodes_in = nodes_in.drop_duplicates(subset='nodeID').reset_index(drop=True)
+    nodes_in = nodes_in.drop_duplicates(subset='node_id').reset_index(drop=True)
     node_list = list(nodes_in.node_id)
 
     return node_list
