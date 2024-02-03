@@ -64,18 +64,22 @@ def split_line_by_point(line_geometry, inter_perc, from_end_or_start):
     split_line = split(snap(line_geometry, minimum_distance,  0.0001), minimum_distance )
     segments = [feature for feature in split_line.geoms]
 
-    length_1 = segments[0].length
-    length_2 = segments[1].length
+    try:
+        length_1 = segments[0].length
+        length_2 = segments[1].length
 
-    if inter_perc > 0.5:
-        if length_1 > length_2:
-            new_geom = segments[0]
+        if inter_perc > 0.5:
+            if length_1 > length_2:
+                new_geom = segments[0]
+            else:
+                new_geom = segments[1]
         else:
-            new_geom = segments[1]
-    else:
-        if length_1 > length_2:
-            new_geom = segments[1]
-        else:
-            new_geom = segments[0]
+            if length_1 > length_2:
+                new_geom = segments[1]
+            else:
+                new_geom = segments[0]
+    except:
+        new_geom = line_geometry
+        print(line_geometry, inter_perc)
 
     return new_geom

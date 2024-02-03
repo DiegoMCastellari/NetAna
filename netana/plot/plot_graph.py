@@ -9,12 +9,15 @@ def plot_geo_graph(v_gdf, v_graph, v_node_mapping):
     for i, facet in enumerate(ax):
         facet.set_title(("Streets", "Primal graph", "Overlay")[i])
         facet.axis("off")
-    nx.draw(v_graph, {v_node_mapping[n][0]:[v_node_mapping[n][0][0], v_node_mapping[n][0][1]] for n in v_node_mapping.keys()}, ax=ax[1], node_size=15)
+
+    new_graph = relabel_nodes_to_numbers(v_graph, v_node_mapping)
+    dict_coords = {n:[v_node_mapping['map_nodes'][n][0][0], v_node_mapping['map_nodes'][n][0][1]] for n in v_node_mapping['map_nodes'].keys()}
+    nx.draw(new_graph, dict_coords, ax=ax[1], node_size=15)
     v_gdf.plot(color='#e32e00', ax=ax[2], zorder=-1)
-    nx.draw(v_graph, {v_node_mapping[n][0]:[v_node_mapping[n][0][0], v_node_mapping[n][0][1]] for n in v_node_mapping.keys()}, ax=ax[2], node_size=15)
+    nx.draw(new_graph, dict_coords, ax=ax[2], node_size=15)
 
 # plot graph with node ids
-def plot_graph (v_graph, v_mapping):
+def plot_graph (v_graph, v_mapping, v_labels=True):
     new_graph = relabel_nodes_to_numbers(v_graph, v_mapping)
-    nx.draw_spring(new_graph, with_labels=True)
+    nx.draw_spring(new_graph, with_labels=v_labels)
     plt.show()
