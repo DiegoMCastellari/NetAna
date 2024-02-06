@@ -2,19 +2,19 @@ import geopandas as gpd
 from shapely.ops import split, snap, nearest_points
 from shapely.geometry import Point, LineString, Polygon
 
-def extract_nearedge_parameters(gdf_edges, f_cost):
-    l_params = gdf_edges[['node_start', 'node_end', f_cost]].values.flatten().tolist()
+def extract_nearedge_parameters(gdf_edges, f_weight):
+    l_params = gdf_edges[['node_start', 'node_end', f_weight]].values.flatten().tolist()
     v_length = list(gdf_edges.length)[0]
 
     return [l_params[0], l_params[1], l_params[2], v_length]
 
-""" def nearest_edge_to_point_parameters(gdf_point, gdf_edges, f_cost, v_max_dist):
+""" def nearest_edge_to_point_parameters(gdf_point, gdf_edges, f_weight, v_max_dist):
 
     gdf_edges['pt_dist'] = [list(gdf_point.distance(line))[0] for line in gdf_edges.geometry]
 
     v_min_dist = list(gdf_edges.loc[gdf_edges['pt_dist'] == gdf_edges['pt_dist'].min(), 'pt_dist'])[0]
     if v_min_dist <= v_max_dist:
-        v_target_pt_1, v_target_pt_2, v_target_w, v_length_line = extract_line_parameters(gdf_edges, f_cost, 'pt_dist')
+        v_target_pt_1, v_target_pt_2, v_target_w, v_length_line = extract_line_parameters(gdf_edges, f_weight, 'pt_dist')
         return [v_target_pt_1, v_target_pt_2, v_target_w, v_length_line]
     else:
         return [0, 0, 0, 0] """
@@ -27,13 +27,13 @@ def nearest_edge_to_point(gdf_point, gdf_edges):
 
 
 # find nearest line to point and return its parameters 
-def nearest_edge_to_point_parameters(gdf_point, gdf_edges, f_cost, v_max_dist):
+def nearest_edge_to_point_parameters(gdf_point, gdf_edges, f_weight, v_max_dist):
     
     gdf_nearest_line = nearest_edge_to_point(gdf_point, gdf_edges)
     v_min_dist = gdf_nearest_line['distance'].min()
 
     if (v_min_dist < v_max_dist):
-        v_target_pt_1, v_target_pt_2, v_target_w, v_length_line = extract_nearedge_parameters(gdf_nearest_line, f_cost)
+        v_target_pt_1, v_target_pt_2, v_target_w, v_length_line = extract_nearedge_parameters(gdf_nearest_line, f_weight)
         return v_target_pt_1, v_target_pt_2, v_target_w, v_length_line
     else:
         return 0, 0, 0, 0

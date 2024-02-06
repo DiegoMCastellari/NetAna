@@ -8,15 +8,15 @@ def calculate_degree_centrality(graph):
     degree_centrality = nx.degree_centrality(graph)
     return degree_centrality
 
-def calculate_closeness_centrality(graph, v_weight='cost'):
+def calculate_closeness_centrality(graph, v_weight='weight'):
     close_centrality = nx.closeness_centrality(graph, distance=v_weight)
     return close_centrality
 
-def calculate_eigenvector_centrality(graph, v_k=1000, v_weight='cost'):
+def calculate_eigenvector_centrality(graph, v_k=1000, v_weight='weight'):
     eigen_centrality = nx.eigenvector_centrality(graph, max_iter=v_k, weight=v_weight)
     return eigen_centrality
 
-def calculate_betweenness_centrality(graph, object_type, nodes_ids=False, v_k=1000, v_weight='cost'):
+def calculate_betweenness_centrality(graph, object_type, nodes_ids=False, v_k=1000, v_weight='weight'):
 
     if object_type == 'Point':
         if nodes_ids != False:
@@ -35,7 +35,7 @@ def calculate_betweenness_centrality(graph, object_type, nodes_ids=False, v_k=10
     else:
         print(f"object_type parameter posible values: 'nodes' or 'edges'.-")
 
-def calculate_load_centrality(graph, v_weight='cost'):
+def calculate_load_centrality(graph, v_weight='weight'):
     load_centrality = nx.load_centrality(graph, weight=v_weight)
     return load_centrality
 
@@ -62,7 +62,7 @@ def merge_centrality_values_to_edges(gdf_edges, centrality_values):
 
 ##**************  GENERAL FUNCTION
 
-def calcualte_edges_centrality(graph, gdf_geom, centrality_type, nodes_ids=False, v_k=1000, v_weight='cost'):
+def calcualte_edges_centrality(graph, gdf_geom, centrality_type, nodes_ids=False, v_k=1000, v_weight='weight'):
 
     geometry_type = list(gdf_geom.geom_type)[0]
 

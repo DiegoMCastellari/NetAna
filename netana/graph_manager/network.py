@@ -3,12 +3,12 @@ import geopandas as gpd
 from shapely.geometry import Point, LineString
 import networkx as nx
 
-def calculate_speed_cost(gdf_network, v_speed): # speed = m/min
+def calculate_speed_weight(gdf_network, v_speed): # speed = m/min
     
-    gdf_network['dist'] = gdf_network.length
-    gdf_network.dist = round(gdf_network.dist, 2)
+    gdf_network['len_m'] = gdf_network.length
+    gdf_network.len_m = round(gdf_network.len_m, 2)
 
-    gdf_network['cost'] = gdf_network['dist'] / v_speed
+    gdf_network['weight'] = gdf_network['len_m'] / v_speed
 
     return gdf_network
 
@@ -17,12 +17,12 @@ def create_gdf_network(gdf_network, v_crs_proj, v_speed, v_label=None):
     gdf_network = gdf_network.explode(index_parts=True).reset_index(drop=True)
     gdf_network = gdf_network.to_crs(v_crs_proj)
     
-    calculate_speed_cost(gdf_network, v_speed)
-    gdf_network = gdf_network[['id', 'dist', 'cost', 'geometry']]
+    calculate_speed_weight(gdf_network, v_speed)
+    gdf_network = gdf_network[['id', 'len_m', 'weight', 'geometry']]
 
     if v_label:
         gdf_network['label'] = v_label
-        gdf_network = gdf_network[['id', 'dist', 'cost', 'label', 'geometry']]
+        gdf_network = gdf_network[['id', 'len_m', 'weight', 'label', 'geometry']]
 
     return gdf_network
 
@@ -39,7 +39,7 @@ def extract_points_from_network(gdf_network):
 
     return gdf_points
 
-def create_connections_network(gdf_network_source, gdf_network_target, v_cost_set, v_crs_proj, v_buffer_search):
+def create_connections_network(gdf_network_source, gdf_network_target, v_weight_set, v_crs_proj, v_buffer_search):
 
     gdf_nodes_source = extract_points_from_network(gdf_network_source)
     gdf_nodes_target = extract_points_from_network(gdf_network_target)
@@ -56,8 +56,8 @@ def create_connections_network(gdf_network_source, gdf_network_target, v_cost_se
     gdf_connections = gdf_connections.merge(gdf_streets_buffer[['id_b', 'geometry_center']], on='id_b', how='left')
     gdf_connections['geom_lines'] = gdf_connections.apply(lambda row: LineString([row.geometry, row.geometry_center]), axis=1)
     gdf_connections['id'] = list(gdf_connections.index +1)
-    gdf_connections['cost'] = v_cost_set
-    gdf_connections = gdf_connections[['id', 'cost', 'geom_lines']] 
+    gdf_connections['weight'] = v_weight_set
+    gdf_connections = gdf_connections[['id', 'weight', 'geom_lines']] 
     gdf_connections.rename(columns={'geom_lines':'geometry'}, inplace=True)
     gdf_connections.crs = gdf_streets_buffer.crs
     
@@ -73,7 +73,7 @@ def create_connections_network(gdf_network_source, gdf_network_target, v_cost_se
     gdf_dict = {
         'street': {
             'gdf':              xxx,
-            'cost_field':       xxx,
+            'weight_field':       xxx,
 
         }
     }
@@ -81,7 +81,7 @@ def create_connections_network(gdf_network_source, gdf_network_target, v_cost_se
     connection_dict= {
         'street'= {
             'target':              xxx,
-            'cost': 
+            'weight': 
             'buffer_search':
         }
             
@@ -102,9 +102,9 @@ def network_from_multi_gdfs(gdf_dict, v_crs_proj, connection_dict=False):
         for con_key in connection_dict.keys():
             gdf_network_source = gdf_dict[con_key]['gdf']
             gdf_network_target = gdf_dict[connection_dict[con_key]['target']]['gdf']
-            v_cost_set = connection_dict[con_key]['cost']
+            v_weight_set = connection_dict[con_key]['weight']
             v_buffer_search = connection_dict[con_key]['buffer_search']
-            gdf_con = create_connections_network(gdf_network_source, gdf_network_target, v_cost_set, v_crs_proj, v_buffer_search)
+            gdf_con = create_connections_network(gdf_network_source, gdf_network_target, v_weight_set, v_crs_proj, v_buffer_search)
             gdf_network['label']= con_key +"_"+ connection_dict[con_key]['target']
             list_networks.append(gdf_con)
     
@@ -112,6 +112,8 @@ def network_from_multi_gdfs(gdf_dict, v_crs_proj, connection_dict=False):
     gdf_network.crs = gdf_net_clean.crs
 
     return gdf_network
+
+
 
 ##************** TOPOLOGY
 

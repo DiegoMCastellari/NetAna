@@ -37,7 +37,7 @@ def insert_source_to_graph(gdf_points, point_id, graph, gdf_nodes, gdf_edges, ma
     else:
         return [graph, mapping_nodes, 0]
 
-def insert_poly_source_to_graph(gdf_sources, v_loc_id, graph, gdf_nodes, gdf_edges, d_mapping, f_cost, v_dist):
+def insert_poly_source_to_graph(gdf_sources, v_loc_id, graph, gdf_nodes, gdf_edges, d_mapping, f_weight, v_dist):
     
     sources_pt = gdf_sources.loc[[v_loc_id]]
     sources_pt.geometry = sources_pt.geometry.apply(lambda x: MultiPoint(list(x.exterior.coords)))
@@ -47,7 +47,7 @@ def insert_poly_source_to_graph(gdf_sources, v_loc_id, graph, gdf_nodes, gdf_edg
 
     v_conected_total = 0
     for i in list(sources_pt.id):
-        G_updated, mapping_nodes_updated, v_conected = insert_source_to_graph(sources_pt, i, graph, gdf_nodes, gdf_edges, d_mapping, f_cost, v_dist)
+        G_updated, mapping_nodes_updated, v_conected = insert_source_to_graph(sources_pt, i, graph, gdf_nodes, gdf_edges, d_mapping, f_weight, v_dist)
         v_conected_total += v_conected
 
     # edges between polygon vertex
@@ -55,7 +55,7 @@ def insert_poly_source_to_graph(gdf_sources, v_loc_id, graph, gdf_nodes, gdf_edg
     start_node = list_coords[0]
     edges_list = []
     for end_node in list_coords[1:]:
-        edges_list.append((start_node, end_node, {f_cost: 0, 'category':'loc', 'geometry':LineString([start_node, end_node])}))
+        edges_list.append((start_node, end_node, {f_weight: 0, 'category':'loc', 'geometry':LineString([start_node, end_node])}))
     G_updated.add_edges_from(edges_list)
 
     return [G_updated, mapping_nodes_updated, v_conected_total]
