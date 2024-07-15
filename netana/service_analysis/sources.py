@@ -13,6 +13,12 @@ def create_sources_from_gdf(gdf_sources, v_crs_proj):
 
     return gdf_sources
 
+# return id of graph's nodes closest to sources
+def closest_nodes_to_sources(gdf_sources, gdf_nodes):
+    gdf_amenities = gpd.sjoin_nearest(gdf_sources, gdf_nodes, how='inner')
+    list_node_sources = list(gdf_amenities['node_id'])
+    return list_node_sources, gdf_amenities
+
 # return id of graph's nodes near sources, by buffer distance
 def search_node_near_to_sources (gdf_sources, gdf_nodes, search_radio):
     nodes_in = gdf_nodes.sjoin(gpd.GeoDataFrame(geometry=gdf_sources.buffer(search_radio)))

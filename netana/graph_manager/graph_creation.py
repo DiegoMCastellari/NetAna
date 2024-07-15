@@ -11,12 +11,12 @@ from .graph_add import add_edges_list_to_graph
 #************* CREATE ***************
 
 # create a graph from a gdf of linestrings (no multilines)
-def create_graph_from_gdf(gdf_network, v_make_directed=False, v_directed=False, remove_isolated=False, remove_selfloop=False):
+def create_graph_from_gdf(gdf_network, f_weight, v_make_directed=False, v_directed=False, remove_isolated=False, remove_selfloop=False):
 
     if 'label' in list(gdf_network.columns):
-        graph = momepy.gdf_to_nx(gdf_network[['id', 'weight', 'label', 'geometry']], approach="primal", directed=v_directed)
+        graph = momepy.gdf_to_nx(gdf_network[['id', f_weight, 'label', 'geometry']], approach="primal", directed=v_directed)
     else:
-        graph = momepy.gdf_to_nx(gdf_network[['id', 'weight', 'geometry']], approach="primal", directed=v_directed)
+        graph = momepy.gdf_to_nx(gdf_network[['id', f_weight, 'geometry']], approach="primal", directed=v_directed)
 
     if remove_isolated == True:
         graph.remove_nodes_from(list(nx.isolates(graph)))
