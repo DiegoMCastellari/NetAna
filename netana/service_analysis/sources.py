@@ -4,14 +4,37 @@ from shapely.ops import nearest_points
 from shapely.geometry import MultiPoint, Point, LineString
 
 # create a clean sources gdf
-def create_sources_from_gdf(gdf_sources, v_crs_proj):
+def create_sources_from_gdf(gdf_sources, v_crs_proj, field_category=None, field_label=None, field_name=None):
     
-    gdf_sources = gdf_sources.to_crs(v_crs_proj)
-    gdf_sources = gdf_sources.explode(index_parts=True).reset_index(drop=True)
-    gdf_sources['id'] = list(gdf_sources.index)
-    gdf_sources['id'] = gdf_sources.apply(lambda row: "loc_"+str(row.id), axis=1) 
+    gdf_sources_2 = gdf_sources.to_crs(v_crs_proj)
+    gdf_sources_2 = gdf_sources_2.explode(index_parts=True).reset_index(drop=True)
 
-    return gdf_sources
+    if 'id' in gdf_sources_2.columns:
+        gdf_sources_2.drop(columns=['id'], inplace=True)
+    gdf_sources_2['id'] = list(gdf_sources_2.index)
+    gdf_sources_2['id'] = gdf_sources_2.apply(lambda row: "loc_"+str(row.id), axis=1) 
+
+    if 'category' not in gdf_sources_2.columns:
+        if field_category is not None:
+            gdf_sources_2.rename(columns={field_category:'category'}, inplace=True)
+        else:
+            gdf_sources_2['category'] = None
+    
+    if 'label' not in gdf_sources_2.columns:
+        if field_label is not None:
+            gdf_sources_2.rename(columns={field_label:'label'}, inplace=True)
+        else:
+            gdf_sources_2['label'] = None
+
+    if 'name' not in gdf_sources_2.columns:
+        if field_name is not None:
+            gdf_sources_2.rename(columns={field_name:'name'}, inplace=True)
+        else:
+            gdf_sources_2['name'] = None
+
+    gdf_sources_2 = gdf_sources_2[['id', 'category', 'label', 'name', 'geometry']]
+
+    return gdf_sources_2
 
 # return id of graph's nodes closest to sources
 def closest_nodes_to_sources(gdf_sources, gdf_nodes):
