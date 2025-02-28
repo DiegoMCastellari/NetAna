@@ -1,32 +1,33 @@
 import pandas as pd
 import geopandas as gpd
+import shapely
 from shapely.geometry import Point, LineString
 import networkx as nx
 
-def calculate_speed_weight(gdf_network, v_speed): # speed = m/min
-    
-    gdf_network['len_m'] = gdf_network.length
-    gdf_network.len_m = round(gdf_network.len_m, 2)
 
-    gdf_network['weight'] = gdf_network['len_m'] / v_speed
+def add_id_field(gdf_network):
+    gdf_network['id'] = "e_"+ (gdf_network.index+1).astype(str)
+    return gdf_network
 
+def calculate_weight_field(gdf_network, v_speed): # speed = km/h
+    v_speed = v_speed * 1000 / 60 # speed = m/min
+    gdf_network['length'] = round(gdf_network.length, 2)
+    gdf_network['weight'] = gdf_network['length'] / v_speed
     return gdf_network
 
 def create_gdf_network(gdf_network, v_crs_proj, v_speed, v_label=None):
-    gdf_network['id'] = list(gdf_network.index +1)
-    gdf_network = gdf_network.explode(index_parts=True).reset_index(drop=True)
+    gdf_network = add_id_field(gdf_network)
     gdf_network = gdf_network.to_crs(v_crs_proj)
-    
-    calculate_speed_weight(gdf_network, v_speed)
-    gdf_network = gdf_network[['id', 'len_m', 'weight', 'geometry']]
+    gdf_network = calculate_weight_field(gdf_network, v_speed)
+    gdf_network = gdf_network[['id', 'length', 'weight', 'geometry']]
 
     if v_label:
         gdf_network['label'] = v_label
-        gdf_network = gdf_network[['id', 'len_m', 'weight', 'label', 'geometry']]
+        gdf_network = gdf_network[['id', 'length', 'weight', 'label', 'geometry']]
 
     return gdf_network
 
-##**************  NETWORKS CONNECTIONS (JOINS) 
+##**************  NETWORKS CONNECTIONS (JOINS) *********************************************************
 
 def extract_points_from_network(gdf_network):
 
@@ -115,7 +116,23 @@ def network_from_multi_gdfs(gdf_dict, v_crs_proj, connection_dict=False):
 
 
 
-##************** TOPOLOGY
+##************** TOPOLOGY *****************************************************
+
+# TOPOLOGIA 
+#- SPLIT LINES -- complete
+#- MERGE LINES
+#- OVERKILL OVERLAPING LINES
+#- CLIP LINES BY POLYGON
+#- DELETE ISLANDS (by id of larger dataset)
+
+def split_intersecting_lines(gdf_network, method="shapely"):
+    if method == 'shapely':
+        unionMerged = gpd.GeoDataFrame(geometry=shapely.get_parts(shapely.line_merge(shapely.union_all(gdf_network.geometry))))
+    else:
+        unary_union_result = gdf_network.unary_union.intersection(gdf_network.unary_union)
+        unionMerged = gpd.GeoDataFrame([unary_union_result], columns=['geometry'], geometry='geometry').explode(index_parts=False).reset_index(drop=True)
+    unionMerged.crs = gdf_network.crs
+    return unionMerged
 
 def reverse_line_direction(gdf_lines):
 
@@ -183,18 +200,6 @@ def extract_points_from_lines(gpd_lines):
 
     df_points_classified.crs = gpd_lines.crs
     df_lines_classified.crs = gpd_lines.crs
-
-    return df_lines_classified, df_points_classified
-
-def split_intersecting_lines(gdf_lines):
-
-    unary_union_result = gdf_lines.unary_union.intersection(gdf_lines.unary_union)
-
-    gpd_lines = gpd.GeoDataFrame([unary_union_result], columns=['geometry'], geometry='geometry').explode(index_parts=False).reset_index(drop=True)
-    df_lines_classified, df_points_classified = extract_points_from_lines(gpd_lines)
-    
-    df_points_classified.crs = gdf_lines.crs
-    df_lines_classified.crs = gdf_lines.crs
 
     return df_lines_classified, df_points_classified
 
