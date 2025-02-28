@@ -1,86 +1,96 @@
 import pandas as pd
 import geopandas as gpd
-from .edges import calculate_isochrone_edges, create_dict_time_pairs, time_from_source_to_all_nodes, edges_with_sources_to_each_source
+from .edges import calculate_isochrones_edges, calculate_individual_isochrone_edges
+from .isochrones_polygons import create_isochrones_polygons, create_ring_isochrones, sort_isochrones_by_weight
 
-
-# create isochrone polygon a for a single weight limit
-def create_isochrones(gdf_edges, v_crs_proj, v_buffer_meters, v_dissolve_distance, f_dissolve='w_limit'):
-    if f_dissolve=='w_limit':
-        weight_limit_value = list(gdf_edges[f_dissolve].unique())[0]
-    v_dissolve_distance_retract = (-0.99) * v_dissolve_distance
-    v_buffer_meters = v_buffer_meters - v_dissolve_distance *0.01
-
-    gdf_edges_buffer = gdf_edges.to_crs(v_crs_proj)
-    gdf_edges_buffer.geometry = gdf_edges_buffer.buffer(v_dissolve_distance) # , cap_style=2
-    gdf_edges_buffer = gdf_edges_buffer.dissolve(by=f_dissolve).reset_index()
-
-    gdf_edges_buffer.geometry = gdf_edges_buffer.buffer(v_dissolve_distance_retract, cap_style=2)
-    gdf_edges_buffer.geometry = gdf_edges_buffer.buffer(v_buffer_meters)
-
-    if f_dissolve=='w_limit':
-        gdf_edges_buffer[f_dissolve] = weight_limit_value
-    gdf_edges_buffer = gdf_edges_buffer.to_crs(gdf_edges.crs)
-
-    return gdf_edges_buffer  
-
-def create_isochrones(graph, gdf_nodes, gdf_edges, list_node_sources, v_weight_limit, v_crs_proj, v_buffer_meters, v_dissolve_distance, f_dissolve='w_limit', f_weight="weight"):
-    df_edges_cost_limit = calculate_isochrone_edges(graph, gdf_nodes, gdf_edges, f_weight, list_node_sources, v_weight_limit=v_weight_limit)
-    df_edges_cost_limit = df_edges_cost_limit[['node_id_st', 'node_id_en', f_weight, 'w_start', 'w_end', 'w_mean', 'w_limit', 'geometry']]
-    gdf_buffer = create_isochrones(df_edges_cost_limit, v_crs_proj, v_buffer_meters, v_dissolve_distance, f_dissolve=f_dissolve)
+## ISOCHRONE FOR ONE WEIGHT LIMIT
+def create_isochrones(graph, gdf_nodes, gdf_edges, gdf_locations, v_weight_limit, v_buffer_meters, v_buffer_distance, f_dissolve='weight_limit', f_weight="weight"):
+    df_edges_weight_limit = calculate_isochrones_edges(graph, gdf_nodes, gdf_edges, f_weight, v_weight_limit, gdf_locations)
+    df_edges_weight_limit = df_edges_weight_limit[['nd_st', 'nd_en', f_weight, 'weight_start', 'weight_end', 'weight_limit', 'geometry']]
+    gdf_buffer = create_isochrones_polygons(df_edges_weight_limit, v_buffer_meters, v_buffer_distance, f_dissolve=f_dissolve)
     return gdf_buffer
 
-# create individual isochrones for each source, with the alternative to divide the dataset in batches
-def create_individual_sources_isochrones(graph, gdf_nodes, gdf_edges, gdf_locations, list_source_nodes, f_weight, v_weight_limit, v_frac=0, v_time_factor= 1.2):
-    
-    df_edges_weight_limit = calculate_isochrone_edges(graph, gdf_nodes, gdf_edges, f_weight, list_source_nodes, v_weight_limit, iso_type='individual', v_frac=v_frac, v_time_factor=v_time_factor)
-    df_all_isos = create_isochrones(df_edges_weight_limit[['node_source_st', 'node_source_en', 'geometry']], "3857", 5, 100, f_dissolve='node_source_st')
-
-    df_all_isos = df_all_isos[['node_source_en', 'geometry']]
-    df_all_isos.rename(columns={'node_source_en':'node_id'}, inplace=True)
-    
-    if 'geometry' in list(gdf_locations.columns):
-        gdf_amenities_iso = df_all_isos.merge(gdf_locations.drop(columns='geometry'), how='left', on='node_id')
-    else:
-        gdf_amenities_iso = df_all_isos.merge(gdf_locations, how='left', on='node_id')
-    # gdf_amenities_iso = gdf_amenities_iso[['src_id', 'category', 'label', 'name', 'node_id', 'geometry']]
-
-    return gdf_amenities_iso
-
-# merge isochrones of different weight limits, into polygons or rings by limit weight
-def merge_isochrones_polygons( list_gpd_service_areas, v_type='rings'):
-
-    gpd_all_areas = pd.concat(list_gpd_service_areas) 
-    gpd_all_areas = gpd_all_areas.sort_values('w_limit', ascending=True).reset_index(drop=True)
-    l_weight_list = list(gpd_all_areas['w_limit'].sort_values(ascending=False))
-
-    if v_type == 'rings':
-        gpd_service_areas_result = gpd.GeoDataFrame([], columns=['w_limit', 'geometry'], geometry='geometry')
-
-        for i in range(len(l_weight_list)-1):
-            p_area_bigger = gpd_all_areas.loc[gpd_all_areas.w_limit <= l_weight_list[i]]
-            p_area_smaller = gpd_all_areas.loc[gpd_all_areas.w_limit <= l_weight_list[i+1]]
-
-            p_area_diff = p_area_bigger.overlay(p_area_smaller[['geometry']], how='difference') 
-            p_area_diff = p_area_diff[['w_limit', 'geometry']] 
-            gpd_service_areas_result = pd.concat([gpd_service_areas_result, p_area_diff])
-
-        gpd_service_areas_result = pd.concat([gpd_service_areas_result, p_area_smaller])
-        gpd_service_areas_result.reset_index(inplace=True, drop=True)
-
-        return gpd_service_areas_result
-    
-    else:
-        return gpd_all_areas
-    
-## SERVICES AREAS FOR MULTIPLE weight LIMITS
-def create_isochrones_for_multiple_weights(graph, gdf_nodes, gdf_edges, f_weight , list_weight, list_source_nodes, v_buffer_meters, v_dissolve_distance, area_type='rings', v_crs_proj="3857"): 
+## ISOCHRONE FOR MULTIPLE WEIGHT LIMITS
+def create_isochrones_multiple_weights(graph, gdf_nodes, gdf_edges, gdf_locations, f_weight , list_weight,  v_buffer_meters, v_buffer_distance, f_dissolve='weight_limit', area_type='rings', v_crs_proj="3857"): 
 
     list_weights_buffers = []
     for v_weight_limit in list_weight:
-        df_edges_weight_limit = calculate_isochrone_edges(graph, gdf_nodes, gdf_edges, f_weight, list_source_nodes, v_weight_limit)
-        df_edges_weight_limit_buffer = create_isochrones(df_edges_weight_limit, v_crs_proj, v_buffer_meters, v_dissolve_distance)
+        df_edges_weight_limit_buffer = create_isochrones(graph, gdf_nodes, gdf_edges, gdf_locations, v_weight_limit, v_buffer_meters, v_buffer_distance, f_dissolve, f_weight)
         list_weights_buffers.append(df_edges_weight_limit_buffer)
 
-    gdf_service_areas = merge_isochrones_polygons( list_weights_buffers, area_type)
+    if area_type=='rings':
+        gdf_service_areas = create_ring_isochrones(list_weights_buffers, f_dissolve)
+    else:
+        gdf_service_areas = sort_isochrones_by_weight(list_weights_buffers, f_dissolve)
 
     return gdf_service_areas
+
+
+## INDIVIDUAL ISOCHRONE FOR ONE WEIGHT LIMIT
+# create individual isochrones for each source, with the alternative to divide the dataset in batches
+def create_individual_isochrones(graph, gdf_edges, gdf_locations, f_weight, v_weight_limit, v_buffer_meters, v_buffer_distance, v_frac=0, v_time_factor= 10):    
+    gdf_indiv_edges_for_iso = calculate_individual_isochrone_edges(graph, gdf_edges, gdf_locations, f_weight, v_weight_limit, v_frac, v_time_factor)
+    indiv_isochrones = create_isochrones_polygons(gdf_indiv_edges_for_iso, v_buffer_meters, v_buffer_distance, f_dissolve='node_source_st')
+
+    if 'weight_limit' not in list(indiv_isochrones.columns):
+        indiv_isochrones['weight_limit'] = v_weight_limit
+
+    return indiv_isochrones
+
+## INDIVIDUAL ISOCHRONE FOR MULTIPLE WEIGHT LIMIT
+def create_individual_isochrones_multiple_weights(graph, gdf_edges, gdf_locations, f_weight, list_weight, v_buffer_meters, v_buffer_distance, f_dissolve='weight_limit', area_type='rings', v_frac=0, v_time_factor= 10):    
+    
+    list_weights_buffers = []
+    for v_weight_limit in list_weight:
+        indiv_isochrones = create_individual_isochrones(graph, gdf_edges, gdf_locations, f_weight, v_weight_limit, v_buffer_meters, v_buffer_distance, v_frac, v_time_factor)
+
+        if 'weight_limit' not in list(indiv_isochrones.columns):
+            indiv_isochrones['weight_limit'] = v_weight_limit
+            
+        list_weights_buffers.append(indiv_isochrones)
+    
+    if area_type=='rings':
+        gdf_indiv_isochrones_multi_weight = create_ring_isochrones(list_weights_buffers, f_dissolve)
+    else:
+        gdf_indiv_isochrones_multi_weight = sort_isochrones_by_weight(list_weights_buffers, f_dissolve)
+
+    return gdf_indiv_isochrones_multi_weight
+
+# ******************************************************************************************* #  
+##  GENERAL ISOCHRONE EDGES FUNTION
+
+""" def calculate_isochrone_edges(graph, gdf_nodes, gdf_edges, f_weight, list_source_nodes, v_weight_limit=0, iso_type='merged', v_frac=0, v_time_factor=1.2):
+
+    if (type(list_source_nodes) == list):
+        if v_weight_limit > 0:
+            if iso_type == 'merged':
+                df_edges_weight_limit = calculate_weight_isochrone_edges(graph, gdf_nodes, gdf_edges, f_weight, list_source_nodes, v_weight_limit)
+                return df_edges_weight_limit
+            elif iso_type =='individual': 
+                df_edges_weight_limit = calculate_individual_isochrone_edges(graph, gdf_edges, list_source_nodes, f_weight, v_weight_limit, v_frac, v_time_factor)
+                return df_edges_weight_limit
+            else:
+                print("Parameter iso_type must be: 'merged' or 'individual'")
+        else:
+            print("Parameter v_weight_limit must be > 0")
+
+    elif (type(list_source_nodes) == gpd.geodataframe.GeoDataFrame) | (type(list_source_nodes) == pd.core.frame.DataFrame):
+        list_df_edges_weight_limit = []
+        for v_time in list(list_source_nodes[f_weight].unique()):
+            v_time_list_node_sources = list(list_source_nodes.loc[list_source_nodes[f_weight] == v_time, 'node_loc_id'])
+
+            if iso_type == 'merged':
+                df_edges_weight_limit = calculate_weight_isochrone_edges(graph, gdf_nodes, gdf_edges, f_weight, v_time_list_node_sources, v_time)
+                df_edges_weight_limit = df_edges_weight_limit[['node_id_st', 'node_id_en', f_weight, 'w_start', 'w_end', 'w_mean', 'w_limit', 'geometry']]
+                list_df_edges_weight_limit.append(df_edges_weight_limit)
+            elif iso_type =='individual': 
+                df_edges_weight_limit = calculate_individual_isochrone_edges(graph, gdf_edges, v_time_list_node_sources, f_weight, v_time, v_frac, v_time_factor)
+                list_df_edges_weight_limit.append(df_edges_weight_limit)
+            else:
+                print("Parameter iso_type must be: 'merged' or 'individual'")
+            
+        df_edges_weight_limit_dis = pd.concat(list_df_edges_weight_limit)
+        return df_edges_weight_limit_dis
+    
+    else:
+        print("Parameter list_source_nodes must be: list or dataframe") """
